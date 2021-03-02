@@ -111,18 +111,18 @@
 
 ### 2.2 Restful语法
 
->  GET请求:
->    http://ip:port/index     查询es的index
->    http://ip:port/index/type/doc_id    根据文档id查询指定文档的信息
->  POST请求:
->    http://ip:port/index/type/_search   查询文档，可以在请求体中添加json字符串的内容，代表查询条件
->    http://ip:port/index/type/doc_id/_update  修改文档 ，在请求体中指定json字符串，代表修改条件
->  PUT请求:
->    http://ip:port/index   创建索引,请求体中指定索引的信息
->    http://ip:port/index/type_mappings  创建索引，然后指定索引存储文档的属性
->  DELETE请求:
->    http://ip:port/index   删除索引 
->    http://ip:port/index/type/doc_id  删除指定的文档
+>  GET请求:  
+>    http://ip:port/index     查询es的index  
+>    http://ip:port/index/type/doc_id    根据文档id查询指定文档的信息  
+>  POST请求:  
+>    http://ip:port/index/type/_search   查询文档，可以在请求体中添加json字符串的内容，代表查询条件  
+>    http://ip:port/index/type/doc_id/_update  修改文档 ，在请求体中指定json字符串，代表修改条件  
+>  PUT请求:  
+>    http://ip:port/index   创建索引,请求体中指定索引的信息  
+>    http://ip:port/index/type_mappings  创建索引，然后指定索引存储文档的属性  
+>  DELETE请求:  
+>    http://ip:port/index   删除索引   
+>    http://ip:port/index/type/doc_id  删除指定的文档  
 
 ### 2.3 索引的操作
 
