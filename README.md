@@ -1335,7 +1335,7 @@ POST /sms-logs-index/sms-logs-type/_search
     "regexp": {
       "mobile": "137[0-9]{8}"
     }
-  }想·
+  }
 }
 ```
 
@@ -1386,4 +1386,231 @@ public void regexpQuery() throws IOException {
 >+ 第六步循环第四步和第五步
 >
 >**Scroll查询方式，不适合做实时的查询**
+
+
+
+```json
+#执行scroll查询，返回第一页数据，并且将文档id信息存放在ES上下文中，指定生存时间1m
+POST /sms-logs-index/sms-logs-type/_search?scroll=1m
+{
+  "query": {
+    "match_all": {}
+  },
+  "size": 2,
+  "sort": [
+    {
+      "fee": {
+        "order": "desc"
+      }
+    }
+  ]
+}
+
+#根据scroll查询下一页数据
+POST /_search/scroll
+{
+  "scroll_id":"DnF1ZXJ5VGhlbkZldGNoAwAAAAAAADGFFmNJeW8zUlByU2kyZ21VdkRWR29sUGcAAAAAAAAxhBZjSXlvM1JQclNpMmdtVXZEVkdvbFBnAAAAAAAAMYYWY0l5bzNSUHJTaTJnbVV2RFZHb2xQZw==",
+  "scroll": "1m"
+}
+
+#删除scroll在ES上下文中的数据
+DELETE /_search/scroll/DnF1ZXJ5VGhlbkZldGNoAwAAAAAAADGFFmNJeW8zUlByU2kyZ21VdkRWR29sUGcAAAAAAAAxhBZjSXlvM1JQclNpMmdtVXZEVkdvbFBnAAAAAAAAMYYWY0l5bzNSUHJTaTJnbVV2RFZHb2xQZw==
+```
+
+---
+
+```java
+@Test
+public void scrollQuery() throws IOException {
+    // 1.创建SearchRequest
+    SearchRequest request = new SearchRequest(index);
+    request.types(type);
+
+    // 2.指定scroll信息
+    request.scroll(TimeValue.timeValueMinutes(1L));
+
+    // 3.指定查询条件
+    SearchSourceBuilder builder = new SearchSourceBuilder();
+    builder.query(QueryBuilders.matchAllQuery()).size(2).sort("fee", SortOrder.DESC);
+    request.source(builder);
+
+    // 4.获取返回结果scrollId，source
+    SearchResponse response = client.search(request, RequestOptions.DEFAULT);
+
+    String scrollId = response.getScrollId();
+    System.out.println("-----------首页-----------");
+    for (SearchHit hit : response.getHits().getHits()) {
+      System.out.println(hit.getSourceAsMap());
+    }
+
+    while (true) {
+
+      // 5.循环-创建SearchScrollRequest
+      SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId);
+
+      // 6.指定scrollId的生存时间
+      scrollRequest.scroll(TimeValue.timeValueSeconds(1L));
+
+      // 7.执行查询获取返回结果
+      SearchResponse scrollResp = client.scroll(scrollRequest, RequestOptions.DEFAULT);
+
+      // 8.判断是否查询到了数据，输出
+      SearchHit[] hits = scrollResp.getHits().getHits();
+      if (hits != null && hits.length > 0) {
+        System.out.println("----------下一页-----------");
+        for (SearchHit hit : hits) {
+          System.out.println(hit.getSourceAsMap());
+        }
+      } else {
+        // 9.判断没有查询到数据-退出循环
+        System.out.println("-----------结束------------");
+
+        break;
+      }
+    }
+
+    // 10.创建ClearScrollRequest
+    ClearScrollRequest clearScrollRequest = new ClearScrollRequest();
+
+    // 11.指定scrollId
+    clearScrollRequest.addScrollId(scrollId);
+
+    // 12.删除ScrollId
+    ClearScrollResponse clearScrollResponse = client.clearScroll(clearScrollRequest, RequestOptions.DEFAULT);
+
+    // 13.输出结果
+    System.out.println("删除scroll：" + clearScrollResponse.isSucceeded());
+}
+```
+
+
+
+### 5.5 delete-by-query
+
+>根据term，match等查询方式去删除大量文档
+>
+>PS：
+>
+> **如果需要删除的内容是index大部分数据，推荐创建一个全新的index，将保留的内容文档添加到全新的索引**
+
+```json
+POST /sms-logs-index/sms-logs-type/_delete_by_query
+{
+  "query": {
+    "range": {
+      "fee": {
+        "lt": 12,
+        "gte": 10
+      }
+    }
+  }
+}
+```
+
+---
+
+```java
+@Test
+public void deleteByQuery() throws IOException {
+    DeleteByQueryRequest request  = new DeleteByQueryRequest(index);
+    request.types(type);
+
+    request.setQuery(QueryBuilders.rangeQuery("fee").lt(12).gte(10));
+
+    BulkByScrollResponse response = client.deleteByQuery(request, RequestOptions.DEFAULT);
+
+    System.out.println(response.getStatus());
+}
+```
+
+
+
+### 5.6 复合查询
+
+#### 5.6.1 bool查询
+
+>复合过滤器，将你的多个查询条件，以一定的逻辑组合在一起
+>
+>+ must: 所有的条件，用must组合在一起，表示AND的意思
+>+ must_not: 将must_not中的条件，全部都不能匹配，表示NOT的意思
+>+ should: 所有的条件，用should组合在一起，表示OR的意思
+
+```json
+#查询省份为武汉或北京
+#运营商不是联通
+#smsContent包含中国和平安
+#bool查询
+POST /sms-logs-index/sms-logs-type/_search
+{
+  "query": {
+    "bool": {
+      "should": [
+        {
+          "term": {
+            "province": {
+              "value": "武汉"
+            }
+          }
+        },
+        {
+          "term": {
+            "province": {
+              "value": "北京"
+            }
+          }
+        }
+      ],
+      "must_not": [
+        {"term": {
+          "operatorId": {
+            "value": "2"
+          }
+        }}
+      ],
+      "must": [
+        {
+          "match": {
+            "smsContent": "中国"
+          }
+        },
+        {
+          "match": {
+            "smsContent": "平安"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+---
+
+```java
+@Test
+public void boolQuery() throws IOException {
+    SearchRequest request = new SearchRequest(index);
+    request.types(type);
+
+    SearchSourceBuilder builder = new SearchSourceBuilder();
+    BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
+
+    boolQueryBuilder.should(QueryBuilders.termQuery("province", "武汉"));
+    boolQueryBuilder.should(QueryBuilders.termQuery("province", "北京"));
+
+    boolQueryBuilder.mustNot(QueryBuilders.termQuery("operatorId", "2"));
+
+    boolQueryBuilder.must(QueryBuilders.matchQuery("smsContent", "中国"));
+    boolQueryBuilder.must(QueryBuilders.matchQuery("smsContent", "平安"));
+
+    builder.query(boolQueryBuilder);
+    request.source(builder);
+
+    SearchResponse response = client.search(request, RequestOptions.DEFAULT);
+
+    for (SearchHit hit : response.getHits().getHits()) {
+      System.out.println(hit.getSourceAsString());
+    }
+}
+```
 
